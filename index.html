@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MetroFlow 智慧轉乘 · HTML 網頁版</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-alt: #f1f5f9;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --outline: #cbd5e1;
+      --primary: #0d9488;
+      --primary-soft: #ccfbf1;
+      --primary-on-soft: #134e4a;
+      --mrt: #0284c7;
+      --bus: #059669;
+      --train: #d97706;
+      --hsr: #ea580c;
+      --walk: #64748b;
+      --danger: #e11d48;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    [data-theme="dark"] {
+      --bg: #0b1117;
+      --surface: #111827;
+      --surface-alt: #1e293b;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --outline: #334155;
+      --primary: #2dd4bf;
+      --primary-soft: #115e59;
+      --primary-on-soft: #ccfbf1;
+      --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 18px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--outline);
+      z-index: 20;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--primary), var(--mrt));
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 16px;
+    }
+    .brand h1 { font-size: 17px; font-weight: 700; }
+    .brand small { display: block; font-size: 11px; color: var(--text-muted); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--outline);
+      background: var(--surface-alt);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .15s, border-color .15s;
+    }
+    .pill-btn:hover { border-color: var(--primary); }
+    .pill-btn:active { transform: scale(.97); }
+    .pill-btn.active {
+      background: var(--primary-soft);
+      color: var(--primary-on-soft);
+      border-color: var(--primary);
+    }
+
+    /* Main split layout */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 430px 1fr;
+      min-height: 0;
+    }
+
+    aside {
+      background: var(--surface);
+      border-right: 1px solid var(--outline);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 14px;
+      gap: 12px;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      background: var(--surface-alt);
+      padding: 4px;
+      border-radius: 14px;
+    }
+    .tab-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      padding: 8px 6px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: var(--surface);
+      color: var(--primary);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    /* Search box */
+    .search-card {
+      background: var(--surface-alt);
+      border: 1px solid var(--outline);
+      border-radius: 16px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .search-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .search-input {
+      flex: 1;
+      border: 1px solid var(--outline);
+      background: var(--surface);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--primary); }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--outline);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+    }
+    .icon-btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .icon-btn.recording {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
+
+    .sub-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .time-input {
+      border: 1px solid var(--outline);
+      background: var(--surface);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .sample-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--outline);
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .chip:hover { color: var(--primary); border-color: var(--primary); }
+
+    /* Current Segment Weather Banner */
+    .segment-weather-card {
+      border: 1px solid var(--outline);
+      border-radius: 16px;
+      padding: 12px;
+      background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(2, 132, 199, 0.08));
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .weather-icon-box {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      background: var(--surface);
+      border: 1px solid var(--outline);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .weather-emoji { font-size: 24px; line-height: 1.1; }
+    .weather-temp { font-size: 12px; font-weight: 700; }
+    .weather-body { flex: 1; min-width: 0; }
+    .weather-seg-title {
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .weather-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .advice-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 7px;
+    }
+    .advice-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+    }
+    .advice-pill.rain { background: rgba(2, 132, 199, 0.14); color: var(--mrt); border-color: rgba(2, 132, 199, 0.35); }
+    .advice-pill.early { background: rgba(217, 119, 6, 0.14); color: var(--train); border-color: rgba(217, 119, 6, 0.35); }
+    .advice-pill.ok { background: rgba(5, 150, 105, 0.14); color: var(--bus); border-color: rgba(5, 150, 105, 0.35); }
+
+    /* Route Cards */
+    .route-card {
+      border: 1px solid var(--outline);
+      border-radius: 16px;
+      padding: 13px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .route-card.selected {
+      border: 2px solid var(--primary);
+      box-shadow: var(--shadow);
+    }
+    .route-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .route-title { font-size: 15px; font-weight: 700; }
+    .route-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .route-time { text-align: right; }
+    .route-mins { font-size: 18px; font-weight: 800; color: var(--primary); }
+    .route-countdown { font-size: 11px; font-weight: 700; color: var(--mrt); font-variant-numeric: tabular-nums; }
+    .route-countdown.urgent { color: var(--danger); }
+
+    .mode-chain {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 9px;
+    }
+    .mode-tag {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 7px;
+      border-radius: 7px;
+      color: #fff;
+    }
+
+    .legs-list {
+      margin-top: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .leg-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: var(--surface-alt);
+      cursor: pointer;
+    }
+    .leg-row.active-leg {
+      background: var(--primary-soft);
+      border-color: var(--primary);
+    }
+    .leg-main { min-width: 0; flex: 1; }
+    .leg-name { font-size: 12px; font-weight: 700; }
+    .leg-detail { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .leg-weather-mini {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 7px;
+      border-radius: 8px;
+      background: var(--surface);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .route-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .btn {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--outline);
+      background: var(--surface-alt);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .btn.alerting {
+      background: rgba(225, 29, 72, 0.14);
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    /* Active Navigation HUD */
+    .nav-hud {
+      border-radius: 16px;
+      padding: 14px;
+      background: var(--primary-soft);
+      color: var(--primary-on-soft);
+      border: 1px solid var(--primary);
+    }
+    .nav-hud h3 { font-size: 14px; margin-bottom: 6px; }
+    .nav-hud p { font-size: 13px; line-height: 1.45; }
+
+    /* Saved & Settings panels */
+    .info-card {
+      border: 1px solid var(--outline);
+      border-radius: 14px;
+      padding: 12px;
+      background: var(--surface-alt);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .info-card h3 { font-size: 14px; font-weight: 700; }
+    .info-card p { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+    /* Map container */
+    main {
+      position: relative;
+      min-height: 300px;
+      background: var(--surface-alt);
+    }
+    #leafletMap, #offlineVectorCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #offlineVectorCanvas { display: none; }
+    .leaflet-tile-pane {
+      filter: saturate(0.68) brightness(1.04) contrast(0.94);
+    }
+    [data-theme="dark"] .leaflet-tile-pane {
+      filter: invert(92%) hue-rotate(180deg) brightness(92%) contrast(90%);
+    }
+    .map-overlay-badge {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 500;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--outline);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: var(--shadow);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      z-index: 999;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+
+    @media (max-width: 880px) {
+      body { height: auto; min-height: 100vh; overflow: auto; }
+      .workspace { grid-template-columns: 1fr; grid-template-rows: 340px auto; }
+      main { order: 1; height: 340px; }
+      aside { order: 2; border-right: none; border-top: 1px solid var(--outline); overflow: visible; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-logo">M</div>
+      <div>
+        <h1>MetroFlow 智慧轉乘 <span style="font-size:11px;font-weight:500;color:var(--primary)">HTML 網頁版</span></h1>
+        <small>Open-Meteo 即時路段氣象 · 語音導航 · AES-GCM 本機端到端加密</small>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="topWeatherBtn" class="pill-btn" title="點擊重新整理 Open-Meteo 天氣">⏳ 載入天氣中…</button>
+      <button id="offlineToggleBtn" class="pill-btn">🌐 連線中</button>
+      <button id="themeToggleBtn" class="pill-btn">🌙 深色模式</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="planner">路線規劃</button>
+        <button class="tab-btn" data-tab="saved">常用與推薦</button>
+        <button class="tab-btn" data-tab="privacy">隱私與離線</button>
+      </div>
+
+      <!-- TAB 1: PLANNER -->
+      <section id="tab-planner" style="display:flex;flex-direction:column;gap:12px;">
+        <div class="search-card">
+          <div class="search-row">
+            <input id="queryInput" class="search-input" type="text" placeholder="例：台北車站到內湖科學園區 08:30" />
+            <button id="voiceInputBtn" class="icon-btn" title="語音輸入起訖點">🎙️</button>
+            <button id="planBtn" class="icon-btn primary" title="開始規劃路線">➜</button>
+          </div>
+          <div class="sub-controls">
+            <label style="font-size:12px;color:var(--text-muted);">出發日期：</label>
+            <input id="dateInput" class="time-input" type="date" />
+            <label style="font-size:12px;color:var(--text-muted);">時間：</label>
+            <input id="timeInput" class="time-input" type="time" />
+            <button id="nowTimeBtn" class="chip">現在出發</button>
+          </div>
+          <div class="sample-chips">
+            <button class="chip sample-query">台北車站到內湖科學園區 08:30</button>
+            <button class="chip sample-query">板橋車站到台北101 現在出發</button>
+            <button class="chip sample-query">淡水到市政府 09:00</button>
+          </div>
+        </div>
+
+        <div id="segmentWeatherContainer"></div>
+        <div id="activeNavContainer"></div>
+        <div id="routesContainer" style="display:flex;flex-direction:column;gap:10px;"></div>
+      </section>
+
+      <!-- TAB 2: SAVED & RECOMMENDATIONS -->
+      <section id="tab-saved" style="display:none;flex-direction:column;gap:12px;">
+        <div id="recommendationCard" class="info-card"></div>
+        <div class="info-card">
+          <h3>🔒 已收藏的常用路線（AES-GCM 本機加密）</h3>
+          <p>點擊任一路線即可一鍵規劃轉乘並載入路段天氣。</p>
+          <div id="savedRoutesList" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+        </div>
+      </section>
+
+      <!-- TAB 3: PRIVACY & OFFLINE -->
+      <section id="tab-privacy" style="display:none;flex-direction:column;gap:12px;">
+        <div class="info-card">
+          <h3>🛡️ Web Crypto AES-256-GCM 端到端加密</h3>
+          <p>您的常用路線與通勤習慣會先在瀏覽器使用 Web Crypto API (AES-GCM 256-bit) 加密後再存入本機儲存空間，無須上傳明文位置。</p>
+          <p id="cryptoFingerprintText" style="font-family:monospace;font-size:11px;"></p>
+        </div>
+        <div class="info-card">
+          <h3>📦 離線快取與輕量化模式</h3>
+          <p id="cacheStatsText">正在檢查快取狀態…</p>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button id="clearCacheBtn" class="btn">清除天氣與路線快取</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main>
+      <div id="leafletMap"></div>
+      <canvas id="offlineVectorCanvas"></canvas>
+      <div id="mapModeBadge" class="map-overlay-badge">🗺️ OpenStreetMap · 支援離線向量備援</div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    // ========= Station Directory (Taiwan Transit Hub Coordinates) =========
+    const STATIONS = {
+      "台北車站": [25.0478, 121.5170],
+      "北車": [25.0478, 121.5170],
+      "內湖科學園區": [25.0797, 121.5752],
+      "內科": [25.0797, 121.5752],
+      "西湖": [25.0821, 121.5672],
+      "港墘": [25.0800, 121.5751],
+      "板橋車站": [25.0143, 121.4637],
+      "板橋": [25.0143, 121.4637],
+      "台北101": [25.0330, 121.5654],
+      "101": [25.0330, 121.5654],
+      "世貿": [25.0330, 121.5654],
+      "淡水": [25.1678, 121.4456],
+      "市政府": [25.0412, 121.5652],
+      "忠孝復興": [25.0416, 121.5438],
+      "忠孝新生": [25.0424, 121.5329],
+      "南港車站": [25.0532, 121.6071],
+      "南港": [25.0532, 121.6071],
+      "松山機場": [25.0630, 121.5517],
+      "西門": [25.0421, 121.5082],
+      "中山": [25.0527, 121.5204],
+      "公館": [25.0149, 121.5342],
+      "新店": [24.9579, 121.5376],
+      "桃園高鐵": [25.0130, 121.2147]
+    };
+
+    const MODE_META = {
+      MRT: { label: "捷運", color: "#0284c7" },
+      BUS: { label: "公車", color: "#059669" },
+      TRAIN: { label: "台鐵", color: "#d97706" },
+      HSR: { label: "高鐵", color: "#ea580c" },
+      WALK: { label: "步行", color: "#64748b" }
+    };
+
+    // ========= State =========
+    const state = {
+      isOffline: !navigator.onLine,
+      theme: localStorage.getItem("metroflow_theme") || "light",
+      plans: [],
+      selectedPlanId: null,
+      selectedLegIndex: 0,
+      monitoredIds: new Set(),
+      activeNav: null, // { planId, legIndex }
+      currentWeather: null,
+      segmentWeather: null,
+      savedRoutes: [],
+      habits: JSON.parse(localStorage.getItem("metroflow_habits") || "[]")
+    };
+
+    let mapInstance = null;
+    let routeLayers = [];
+    let countdownTimer = null;
+
+    // ========= Toast Helper =========
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.style.display = "block";
+      clearTimeout(el._t);
+      el._t = setTimeout(() => { el.style.display = "none"; }, 3200);
+    }
+
+    // ========= Web Crypto AES-256-GCM E2EE =========
+    async function getOrCreateCryptoKey() {
+      let raw = localStorage.getItem("metroflow_e2ee_raw_key");
+      if (!raw) {
+        const bytes = crypto.getRandomValues(new Uint8Array(32));
+        raw = btoa(String.fromCharCode(...bytes));
+        localStorage.setItem("metroflow_e2ee_raw_key", raw);
+      }
+      const keyBytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+      const hashBuf = await crypto.subtle.digest("SHA-256", keyBytes);
+      const fp = Array.from(new Uint8Array(hashBuf)).slice(0, 6).map(b => b.toString(16).padStart(2, "0")).join(":").toUpperCase();
+      document.getElementById("cryptoFingerprintText").textContent = `金鑰指紋 (SHA-256): ${fp}`;
+      return crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+    }
+
+    async function encryptJson(obj) {
+      const key = await getOrCreateCryptoKey();
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encoded = new TextEncoder().encode(JSON.stringify(obj));
+      const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+      return {
+        iv: btoa(String.fromCharCode(...iv)),
+        data: btoa(String.fromCharCode(...new Uint8Array(cipher)))
+      };
+    }
+
+    async function decryptJson(payload) {
+      const key = await getOrCreateCryptoKey();
+      const iv = Uint8Array.from(atob(payload.iv), c => c.charCodeAt(0));
+      const data = Uint8Array.from(atob(payload.data), c => c.charCodeAt(0));
+      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+      return JSON.parse(new TextDecoder().decode(plain));
+    }
+
+    async function loadSavedRoutes() {
+      try {
+        const raw = localStorage.getItem("metroflow_saved_e2ee");
+        if (raw) {
+          state.savedRoutes = await decryptJson(JSON.parse(raw));
+        }
+      } catch {
+        state.savedRoutes = [];
+      }
+      renderSavedRoutes();
+      renderRecommendation();
+    }
+
+    async function persistSavedRoutes() {
+      const enc = await encryptJson(state.savedRoutes);
+      localStorage.setItem("metroflow_saved_e2ee", JSON.stringify(enc));
+    }
+
+    // ========= Open-Meteo Free Weather Service =========
+    function mapWmoInfo(code, precipProb) {
+      if ([95, 96, 99].includes(code)) return { icon: "⛈️", text: "雷陣雨" };
+      if ([71, 73, 75, 77, 85, 86].includes(code)) return { icon: "❄️", text: "降雪結霜" };
+      if ([55, 61, 63, 65, 66, 67, 80, 81, 82].includes(code) || precipProb >= 60) return { icon: "☔", text: "降雨中" };
+      if ([51, 53, 56, 57].includes(code) || precipProb >= 40) return { icon: "🌦️", text: "毛毛細雨" };
+      if ([45, 48].includes(code)) return { icon: "🌫️", text: "有霧低能見度" };
+      if (code === 3) return { icon: "☁️", text: "多雲陰天" };
+      if ([1, 2].includes(code)) return { icon: "⛅", text: "晴時多雲" };
+      return { icon: "☀️", text: "晴朗無雲" };
+    }
+
+    function evaluateCommuteWeather(code, precipProb, precipMm, windKmh, mode) {
+      const isOutdoor = mode === "BUS" || mode === "WALK";
+      const heavyRain = [55, 63, 65, 67, 81, 82, 95, 96, 99].includes(code) || precipProb >= 65 || precipMm >= 1.0;
+      const lightRain = [51, 53, 56, 57, 61, 66, 80].includes(code) || precipProb >= 40 || precipMm > 0;
+      const fog = [45, 48].includes(code);
+
+      const needsRainGear = heavyRain || lightRain;
+      const rainGearLabel = heavyRain ? "務必攜帶雨具" : (lightRain ? "建議攜帶摺疊傘" : "無需攜帶雨具");
+
+      let leaveEarlyMinutes = 0;
+      if (heavyRain || windKmh >= 32) leaveEarlyMinutes = isOutdoor ? 12 : 10;
+      else if (lightRain || fog || windKmh >= 24) leaveEarlyMinutes = isOutdoor ? 8 : 5;
+
+      const leaveEarlyLabel = leaveEarlyMinutes > 0
+        ? `建議提早 ${leaveEarlyMinutes} 分鐘出門`
+        : "按原時間出門即可";
+
+      let advice = `路段天候穩定舒適（降雨機率 ${precipProb}%），無需攜帶雨具，準時出門即可。`;
+      if (heavyRain && isOutdoor) {
+        advice = `此路段需戶外步行或候車，降雨機率 ${precipProb}%，務必攜帶雨具並提早 ${leaveEarlyMinutes} 分鐘出門。`;
+      } else if (heavyRain) {
+        advice = `降雨機率高達 ${precipProb}%，建議備妥雨具並預留 +${leaveEarlyMinutes} 分鐘轉乘緩衝。`;
+      } else if (lightRain) {
+        advice = `可能遇短暫細雨（${precipProb}%），建議攜帶摺疊傘並提早 ${leaveEarlyMinutes} 分鐘出門。`;
+      }
+
+      return { needsRainGear, rainGearLabel, leaveEarlyMinutes, leaveEarlyLabel, advice };
+    }
+
+    async function fetchOpenMeteo(lat, lng, targetDateIso = null, targetHour = null, mode = null, locationName = "目前位置") {
+      const dateKey = targetDateIso || "today";
+      const cacheKey = `w_${lat.toFixed(2)}_${lng.toFixed(2)}_${mode || "ALL"}_${dateKey}_${targetHour ?? "now"}`;
+      const cacheMap = JSON.parse(localStorage.getItem("metroflow_weather_cache") || "{}");
+      const cached = cacheMap[cacheKey];
+      const now = Date.now();
+      if (cached && (state.isOffline || now - cached.fetchedAt < 20 * 60 * 1000)) {
+        return { ...cached, stale: state.isOffline };
+      }
+
+      if (state.isOffline) {
+        return cached || {
+          temp: 23, code: 2, icon: "⛅", text: "離線快取預設", precipProb: 20, precipMm: 0, wind: 8,
+          needsRainGear: false, rainGearLabel: "無需攜帶雨具", leaveEarlyMinutes: 0,
+          leaveEarlyLabel: "按原時間出門即可", advice: "目前為離線模式，顯示標準通勤建議。", locationName, stale: true
+        };
+      }
+
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&hourly=temperature_2m,precipitation_probability,weather_code&forecast_days=14&timezone=auto`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Open-Meteo HTTP " + res.status);
+      const data = await res.json();
+
+      const cur = data.current || {};
+      const hourly = data.hourly || {};
+      const times = hourly.time || [];
+      let idx = 0;
+      const h = targetHour ?? new Date().getHours();
+      const hh = String(h).padStart(2, "0");
+      let found = targetDateIso ? times.findIndex(t => t.startsWith(`${targetDateIso}T${hh}:`)) : -1;
+      if (found < 0) found = times.findIndex(t => t.includes(`T${hh}:`));
+      if (found >= 0) idx = found;
+
+      const useHourly = targetHour !== null || !!targetDateIso;
+      const temp = useHourly && hourly.temperature_2m?.[idx] !== undefined ? hourly.temperature_2m[idx] : (cur.temperature_2m ?? 24);
+      const code = useHourly && hourly.weather_code?.[idx] !== undefined ? hourly.weather_code[idx] : (cur.weather_code ?? 1);
+      const precipProb = hourly.precipitation_probability?.[idx] ?? (code >= 51 ? 70 : 15);
+      const precipMm = cur.precipitation ?? 0;
+      const wind = cur.wind_speed_10m ?? 8;
+      const wmo = mapWmoInfo(code, precipProb);
+      const guidance = evaluateCommuteWeather(code, precipProb, precipMm, wind, mode);
+
+      const snapshot = {
+        temp: Math.round(temp),
+        code,
+        icon: wmo.icon,
+        text: wmo.text,
+        precipProb,
+        precipMm,
+        wind: Math.round(wind),
+        ...guidance,
+        locationName,
+        fetchedAt: now,
+        stale: false
+      };
+
+      cacheMap[cacheKey] = snapshot;
+      // Keep cache compact
+      const keys = Object.keys(cacheMap);
+      if (keys.length > 20) delete cacheMap[keys[0]];
+      localStorage.setItem("metroflow_weather_cache", JSON.stringify(cacheMap));
+      updateCacheStats();
+      return snapshot;
+    }
+
+    async function refreshTopWeather() {
+      const btn = document.getElementById("topWeatherBtn");
+      try {
+        const w = await fetchOpenMeteo(25.0478, 121.5170, null, null, null, "台北市中心");
+        state.currentWeather = w;
+        btn.textContent = `${w.icon} ${w.temp}°C · ${w.text} · 降雨${w.precipProb}%`;
+      } catch {
+        btn.textContent = "⛅ 離線天氣快取";
+      }
+    }
+
+    async function refreshSegmentWeather() {
+      const plan = state.plans.find(p => p.id === state.selectedPlanId);
+      if (!plan) { state.segmentWeather = null; renderSegmentWeather(); return; }
+      const legIdx = state.activeNav ? state.activeNav.legIndex : state.selectedLegIndex;
+      const leg = plan.legs[legIdx];
+      if (!leg) return;
+
+      const midLat = (leg.startLat + leg.endLat) / 2;
+      const midLng = (leg.startLng + leg.endLng) / 2;
+      const hourMatch = leg.departureTime.match(/(\d{1,2}):\d{2}/);
+      const targetHour = hourMatch ? parseInt(hourMatch[1], 10) : null;
+      const targetDateIso = document.getElementById("dateInput")?.value || null;
+      try {
+        const w = await fetchOpenMeteo(midLat, midLng, targetDateIso, targetHour, leg.mode, leg.departureStop);
+        state.segmentWeather = {
+          title: `${MODE_META[leg.mode].label} ${leg.lineName}（${leg.departureStop} → ${leg.arrivalStop}）`,
+          weather: w
+        };
+      } catch {
+        state.segmentWeather = null;
+      }
+      renderSegmentWeather();
+      renderRoutes();
+      renderActiveNav();
+    }
+
+    // ========= Route Planner Engine =========
+    function resolveCoord(name, fallback) {
+      for (const [k, coords] of Object.entries(STATIONS)) {
+        if (name.includes(k) || k.includes(name)) return { name: k, coords };
+      }
+      return { name, coords: fallback };
+    }
+
+    function parseQuery(raw) {
+      let clean = raw.trim();
+      let depTime = document.getElementById("timeInput").value;
+      const timeMatch = clean.match(/(\d{1,2}:\d{2})/);
+      if (timeMatch) {
+        depTime = timeMatch[1].padStart(5, "0");
+        clean = clean.replace(timeMatch[0], "").trim();
+      }
+      if (!depTime) {
+        const d = new Date();
+        depTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      }
+      clean = clean.replace(/^從/, "").replace(/現在出發|出發/g, "").trim();
+      const parts = clean.split(/到|至|->|→/).map(s => s.trim()).filter(Boolean);
+      const originRaw = parts[0] || "台北車站";
+      const destRaw = parts[1] || "內湖科學園區";
+      const o = resolveCoord(originRaw, [25.0478, 121.5170]);
+      const d = resolveCoord(destRaw, [25.0797, 121.5752]);
+      return { originName: o.name, oCoords: o.coords, destName: d.name, dCoords: d.coords, depTime };
+    }
+
+    function addMinutes(timeStr, mins) {
+      const [h, m] = timeStr.split(":").map(Number);
+      const total = (h * 60 + m + mins) % (24 * 60);
+      return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+    }
+
+    function buildMultimodalPlans(parsed) {
+      const mid1 = [
+        parsed.oCoords[0] + (parsed.dCoords[0] - parsed.oCoords[0]) * 0.45,
+        parsed.oCoords[1] + (parsed.dCoords[1] - parsed.oCoords[1]) * 0.45
+      ];
+      const mid2 = [
+        parsed.oCoords[0] + (parsed.dCoords[0] - parsed.oCoords[0]) * 0.85,
+        parsed.oCoords[1] + (parsed.dCoords[1] - parsed.oCoords[1]) * 0.85
+      ];
+      const t0 = parsed.depTime;
+
+      const plan1 = {
+        id: "plan-fast-" + Date.now(),
+        title: "推薦快速轉乘（捷運＋公車）",
+        originName: parsed.originName,
+        destName: parsed.destName,
+        totalMinutes: 31,
+        transfers: 1,
+        fare: 35,
+        legs: [
+          {
+            mode: "MRT", lineName: "板南／文湖轉乘線", departureStop: parsed.originName, arrivalStop: "轉乘樞紐站",
+            departureTime: t0, arrivalTime: addMinutes(t0, 14), durationMinutes: 14, stops: 5,
+            platform: "月台 2 號門", nextSec: 165, headway: 4,
+            startLat: parsed.oCoords[0], startLng: parsed.oCoords[1], endLat: mid1[0], endLng: mid1[1]
+          },
+          {
+            mode: "BUS", lineName: "幹線公車 222", departureStop: "轉乘樞紐站", arrivalStop: `${parsed.destName}口`,
+            departureTime: addMinutes(t0, 17), arrivalTime: addMinutes(t0, 27), durationMinutes: 10, stops: 4,
+            platform: "公車專用道 B 區", nextSec: 260, headway: 8,
+            startLat: mid1[0], startLng: mid1[1], endLat: mid2[0], endLng: mid2[1]
+          },
+          {
+            mode: "WALK", lineName: "步行前往目的地", departureStop: `${parsed.destName}口`, arrivalStop: parsed.destName,
+            departureTime: addMinutes(t0, 27), arrivalTime: addMinutes(t0, 31), durationMinutes: 4, stops: 0,
+            platform: "沿人行道步行約 280 公尺", nextSec: 60, headway: 5,
+            startLat: mid2[0], startLng: mid2[1], endLat: parsed.dCoords[0], endLng: parsed.dCoords[1]
+          }
+        ]
+      };
+
+      const plan2 = {
+        id: "plan-rail-" + Date.now(),
+        title: "雨天避雨優先（地下軌道＋步行）",
+        originName: parsed.originName,
+        destName: parsed.destName,
+        totalMinutes: 35,
+        transfers: 1,
+        fare: 30,
+        legs: [
+          {
+            mode: "TRAIN", lineName: "台鐵區間快車", departureStop: parsed.originName, arrivalStop: "松山轉乘站",
+            departureTime: addMinutes(t0, 3), arrivalTime: addMinutes(t0, 14), durationMinutes: 11, stops: 2,
+            platform: "第 3 月台", nextSec: 320, headway: 10,
+            startLat: parsed.oCoords[0], startLng: parsed.oCoords[1], endLat: mid1[0], endLng: mid1[1]
+          },
+          {
+            mode: "MRT", lineName: "捷運接駁線", departureStop: "松山轉乘站", arrivalStop: parsed.destName,
+            departureTime: addMinutes(t0, 18), arrivalTime: addMinutes(t0, 35), durationMinutes: 17, stops: 6,
+            platform: "地下連通道 1 號出口", nextSec: 210, headway: 5,
+            startLat: mid1[0], startLng: mid1[1], endLat: parsed.dCoords[0], endLng: parsed.dCoords[1]
+          }
+        ]
+      };
+
+      return [plan1, plan2];
+    }
+
+    async function runPlan(queryOverride = null) {
+      const input = document.getElementById("queryInput");
+      const raw = (queryOverride ?? input.value).trim();
+      if (!raw) {
+        showToast("請輸入起點、目的地與出發時間");
+        return;
+      }
+      input.value = raw;
+      const parsed = parseQuery(raw);
+      const plans = buildMultimodalPlans(parsed);
+      state.plans = plans;
+      state.selectedPlanId = plans[0].id;
+      state.selectedLegIndex = 0;
+      state.activeNav = null;
+
+      // Record commute habit locally for personalized departure recommendations
+      state.habits.unshift({
+        route: `${parsed.originName} → ${parsed.destName}`,
+        hour: parseInt(parsed.depTime.split(":")[0], 10),
+        minute: parseInt(parsed.depTime.split(":")[1], 10),
+        duration: plans[0].totalMinutes
+      });
+      state.habits = state.habits.slice(0, 20);
+      localStorage.setItem("metroflow_habits", JSON.stringify(state.habits));
+      localStorage.setItem("metroflow_last_routes", JSON.stringify(plans));
+
+      renderRoutes();
+      renderRecommendation();
+      drawSelectedRouteOnMap();
+      updateCacheStats();
+      refreshSegmentWeather();
+    }
+
+    // ========= Rendering =========
+    function renderSegmentWeather() {
+      const container = document.getElementById("segmentWeatherContainer");
+      const sw = state.segmentWeather;
+      if (!sw) { container.innerHTML = ""; return; }
+      const w = sw.weather;
+      container.innerHTML = `
+        <div class="segment-weather-card">
+          <div class="weather-icon-box" title="${w.text}">
+            <div class="weather-emoji">${w.icon}</div>
+            <div class="weather-temp">${w.temp}°C</div>
+          </div>
+          <div class="weather-body">
+            <div class="weather-seg-title">當前路段 · ${sw.title}</div>
+            <div class="weather-meta">${w.text} · 降雨機率 ${w.precipProb}% · 風速 ${w.wind} km/h · Open-Meteo</div>
+            <div class="advice-badges">
+              <span class="advice-pill ${w.needsRainGear ? "rain" : "ok"}">${w.needsRainGear ? "☂️" : "✅"} ${w.rainGearLabel}</span>
+              <span class="advice-pill ${w.leaveEarlyMinutes > 0 ? "early" : "ok"}">⏱️ ${w.leaveEarlyLabel}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderRoutes() {
+      const container = document.getElementById("routesContainer");
+      if (!state.plans.length) {
+        container.innerHTML = `<div class="info-card"><h3>快速開始轉乘規劃</h3><p>輸入「起點到目的地 時間」或點擊上方範例與語音麥克風，系統將整合公車、捷運、火車路線與 Open-Meteo 路段天氣建議。</p></div>`;
+        return;
+      }
+
+      container.innerHTML = state.plans.map(plan => {
+        const isSel = plan.id === state.selectedPlanId;
+        const firstTransit = plan.legs.find(l => l.mode !== "WALK") || plan.legs[0];
+        const min = Math.floor(firstTransit.nextSec / 60);
+        const sec = firstTransit.nextSec % 60;
+        const isAlert = state.monitoredIds.has(plan.id);
+
+        const chainHtml = plan.legs.map(l =>
+          `<span class="mode-tag" style="background:${MODE_META[l.mode].color}">${MODE_META[l.mode].label} ${l.durationMinutes}分</span>`
+        ).join(`<span style="color:var(--text-muted);font-size:12px">→</span>`);
+
+        const legsHtml = isSel ? `
+          <div class="legs-list">
+            ${plan.legs.map((leg, idx) => {
+              const isCur = idx === state.selectedLegIndex;
+              const miniWeather = isCur && state.segmentWeather
+                ? `<span class="leg-weather-mini">${state.segmentWeather.weather.icon} ${state.segmentWeather.weather.temp}°C</span>`
+                : "";
+              return `
+                <div class="leg-row ${isCur ? "active-leg" : ""}" onclick="event.stopPropagation(); selectLeg(${idx})">
+                  <div class="leg-main">
+                    <div class="leg-name">${MODE_META[leg.mode].label} ${leg.lineName} (${leg.departureStop} → ${leg.arrivalStop})</div>
+                    <div class="leg-detail">${isCur ? "目前檢視路段 · " : ""}${leg.departureTime} 出發 · ${leg.durationMinutes}分 · ${leg.platform}</div>
+                  </div>
+                  ${miniWeather}
+                </div>
+              `;
+            }).join("")}
+          </div>
+          ${state.segmentWeather ? `<p style="font-size:12px;color:var(--primary);margin-top:8px;font-weight:600;">💡 ${state.segmentWeather.weather.advice}</p>` : ""}
+          <div class="route-actions">
+            <button class="btn ${isAlert ? "alerting" : ""}" onclick="event.stopPropagation(); toggleAlert('${plan.id}')">${isAlert ? "🔔 提醒中" : "🔔 到站提醒"}</button>
+            <button class="btn" onclick="event.stopPropagation(); saveCurrentPlan('${plan.id}')">🔒 加密收藏</button>
+            <button class="btn primary" onclick="event.stopPropagation(); startVoiceNav('${plan.id}')">🔊 語音導航</button>
+          </div>
+        ` : "";
+
+        return `
+          <div class="route-card ${isSel ? "selected" : ""}" onclick="selectPlan('${plan.id}')">
+            <div class="route-header">
+              <div>
+                <div class="route-title">${plan.title}</div>
+                <div class="route-sub">${plan.originName} → ${plan.destName} · 轉乘 ${plan.transfers} 次 · 約 $${plan.fare}</div>
+              </div>
+              <div class="route-time">
+                <div class="route-mins">${plan.totalMinutes} 分</div>
+                <div class="route-countdown ${min <= 3 ? "urgent" : ""}">進站 ${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}</div>
+              </div>
+            </div>
+            <div class="mode-chain">${chainHtml}</div>
+            ${legsHtml}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderActiveNav() {
+      const box = document.getElementById("activeNavContainer");
+      if (!state.activeNav) { box.innerHTML = ""; return; }
+      const plan = state.plans.find(p => p.id === state.activeNav.planId);
+      const leg = plan?.legs[state.activeNav.legIndex];
+      if (!leg) { box.innerHTML = ""; return; }
+      const w = state.segmentWeather?.weather;
+      const isLast = state.activeNav.legIndex >= plan.legs.length - 1;
+      box.innerHTML = `
+        <div class="nav-hud">
+          <h3>🔊 語音導航中（步驟 ${state.activeNav.legIndex + 1}/${plan.legs.length}）${w ? `· ${w.icon} ${w.temp}°C` : ""}</h3>
+          <p><strong>${MODE_META[leg.mode].label} ${leg.lineName}</strong>：${leg.departureStop} → ${leg.arrivalStop}<br/>${leg.platform} · 預計 ${leg.durationMinutes} 分鐘</p>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn" onclick="speakCurrentStep()">🔁 重新播報</button>
+            <button class="btn primary" onclick="nextNavStep()">${isLast ? "完成抵達" : "下一步"}</button>
+            <button class="btn" onclick="stopNav()">結束</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSavedRoutes() {
+      const list = document.getElementById("savedRoutesList");
+      if (!state.savedRoutes.length) {
+        list.innerHTML = `<p>尚未收藏常用路線，請先規劃後點擊「加密收藏」。</p>`;
+        return;
+      }
+      list.innerHTML = state.savedRoutes.map((r, idx) => `
+        <div class="route-card" style="cursor:default;">
+          <div class="route-header">
+            <div>
+              <div class="route-title">${r.label}</div>
+              <div class="route-sub">${r.originName} → ${r.destName} · 慣用 ${r.preferredTime}</div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="pill-btn active" onclick="quickPlanSaved(${idx})">一鍵規劃</button>
+              <button class="pill-btn" onclick="deleteSaved(${idx})">刪除</button>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderRecommendation() {
+      const box = document.getElementById("recommendationCard");
+      const w = state.currentWeather;
+      const rainOffset = (w && w.leaveEarlyMinutes > 0) ? w.leaveEarlyMinutes : 0;
+      let recTime = "08:20";
+      if (state.habits.length) {
+        const avgMins = Math.round(state.habits.reduce((acc, h) => acc + h.hour * 60 + h.minute, 0) / state.habits.length);
+        const adj = Math.max(0, avgMins - rainOffset);
+        recTime = `${String(Math.floor(adj / 60)).padStart(2, "0")}:${String(adj % 60).padStart(2, "0")}`;
+      }
+      box.innerHTML = `
+        <h3>✨ 個人化最佳出發時間建議</h3>
+        <div style="font-size:26px;font-weight:800;color:var(--primary);">${recTime}</div>
+        <p>${state.habits.length ? `根據您近 ${state.habits.length} 筆通勤習慣分析` : "依據標準通勤高峰模型分析"}${rainOffset > 0 ? `，結合目前降雨機率預先提早 ${rainOffset} 分鐘` : "，目前天候穩定"}。</p>
+      `;
+    }
+
+    // ========= Interactive Actions =========
+    window.selectPlan = (id) => {
+      state.selectedPlanId = id;
+      state.selectedLegIndex = 0;
+      drawSelectedRouteOnMap();
+      refreshSegmentWeather();
+    };
+    window.selectLeg = (idx) => {
+      state.selectedLegIndex = idx;
+      refreshSegmentWeather();
+    };
+    window.toggleAlert = (id) => {
+      if (state.monitoredIds.has(id)) {
+        state.monitoredIds.delete(id);
+        showToast("已關閉即時到站提醒");
+      } else {
+        state.monitoredIds.add(id);
+        if ("Notification" in window && Notification.permission === "default") {
+          Notification.requestPermission();
+        }
+        showToast("已開啟即時到站提醒");
+      }
+      renderRoutes();
+    };
+    window.saveCurrentPlan = async (id) => {
+      const plan = state.plans.find(p => p.id === id);
+      if (!plan) return;
+      state.savedRoutes.unshift({
+        label: `${plan.originName} → ${plan.destName}`,
+        originName: plan.originName,
+        destName: plan.destName,
+        preferredTime: plan.legs[0]?.departureTime || "08:30"
+      });
+      await persistSavedRoutes();
+      renderSavedRoutes();
+      showToast("已以 AES-GCM 加密儲存至常用路線");
+    };
+    window.quickPlanSaved = (idx) => {
+      const r = state.savedRoutes[idx];
+      if (!r) return;
+      document.querySelector('[data-tab="planner"]').click();
+      runPlan(`${r.originName}到${r.destName} ${r.preferredTime}`);
+    };
+    window.deleteSaved = async (idx) => {
+      state.savedRoutes.splice(idx, 1);
+      await persistSavedRoutes();
+      renderSavedRoutes();
+    };
+    window.startVoiceNav = (id) => {
+      state.selectedPlanId = id;
+      state.selectedLegIndex = 0;
+      state.activeNav = { planId: id, legIndex: 0 };
+      refreshSegmentWeather();
+      speakCurrentStep();
+    };
+    window.speakCurrentStep = () => {
+      if (!state.activeNav) return;
+      const plan = state.plans.find(p => p.id === state.activeNav.planId);
+      const leg = plan?.legs[state.activeNav.legIndex];
+      if (!leg || !("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(
+        `第 ${state.activeNav.legIndex + 1} 段，搭乘${MODE_META[leg.mode].label} ${leg.lineName}，從${leg.departureStop}前往${leg.arrivalStop}，${leg.platform}。`
+      );
+      u.lang = "zh-TW";
+      window.speechSynthesis.speak(u);
+    };
+    window.nextNavStep = () => {
+      const plan = state.plans.find(p => p.id === state.activeNav.planId);
+      if (!plan) return;
+      if (state.activeNav.legIndex + 1 < plan.legs.length) {
+        state.activeNav.legIndex += 1;
+        state.selectedLegIndex = state.activeNav.legIndex;
+        refreshSegmentWeather();
+        speakCurrentStep();
+      } else {
+        showToast("已完成語音導航，祝您旅途愉快！");
+        stopNav();
+      }
+    };
+    window.stopNav = () => {
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      state.activeNav = null;
+      renderActiveNav();
+    };
+
+    // ========= Map (CARTO Voyager Leaflet + Styled Offline Vector Fallback) =========
+    let tileLayerRef = null;
+    function initMap() {
+      const leafletEl = document.getElementById("leafletMap");
+      const canvasEl = document.getElementById("offlineVectorCanvas");
+      if (typeof L !== "undefined" && !state.isOffline) {
+        leafletEl.style.display = "block";
+        canvasEl.style.display = "none";
+        if (!mapInstance) {
+          mapInstance = L.map("leafletMap", { zoomControl: true }).setView([25.0478, 121.5319], 13);
+          tileLayerRef = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors",
+            maxZoom: 19
+          }).addTo(mapInstance);
+        }
+        document.getElementById("mapModeBadge").textContent = "🗺️ OpenStreetMap · 清爽轉乘地圖";
+      } else {
+        leafletEl.style.display = "none";
+        canvasEl.style.display = "block";
+        document.getElementById("mapModeBadge").textContent = "📡 離線向量地圖模式";
+        drawOfflineCanvas();
+      }
+      drawSelectedRouteOnMap();
+    }
+
+    function createArcPoints(p1, p2, idx, mode) {
+      if (mode === "WALK") return [p1, p2];
+      const dLat = p2[0] - p1[0], dLng = p2[1] - p1[1];
+      const sign = idx % 2 === 0 ? 1 : -1;
+      const ctrl = [(p1[0] + p2[0]) / 2 - dLng * 0.08 * sign, (p1[1] + p2[1]) / 2 + dLat * 0.08 * sign];
+      const pts = [];
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12, u = 1 - t;
+        pts.push([u * u * p1[0] + 2 * u * t * ctrl[0] + t * t * p2[0], u * u * p1[1] + 2 * u * t * ctrl[1] + t * t * p2[1]]);
+      }
+      return pts;
+    }
+
+    function drawSelectedRouteOnMap() {
+      const plan = state.plans.find(p => p.id === state.selectedPlanId);
+      if (state.isOffline || !mapInstance) {
+        drawOfflineCanvas(plan);
+        return;
+      }
+      routeLayers.forEach(l => mapInstance.removeLayer(l));
+      routeLayers = [];
+      if (!plan) return;
+
+      const bounds = [];
+      const casingColor = state.theme === "dark" ? "#0f172a" : "#ffffff";
+      plan.legs.forEach((leg, idx) => {
+        const p1 = [leg.startLat, leg.startLng];
+        const p2 = [leg.endLat, leg.endLng];
+        const pts = createArcPoints(p1, p2, idx, leg.mode);
+        bounds.push(...pts);
+
+        const isFocused = idx === state.selectedLegIndex;
+        const halo = L.polyline(pts, {
+          color: casingColor,
+          weight: leg.mode === "WALK" ? 7 : (isFocused ? 11 : 9),
+          opacity: 0.95,
+          lineCap: "round"
+        }).addTo(mapInstance);
+        routeLayers.push(halo);
+
+        const poly = L.polyline(pts, {
+          color: MODE_META[leg.mode].color,
+          weight: leg.mode === "WALK" ? 4 : (isFocused ? 7 : 5),
+          dashArray: leg.mode === "WALK" ? "7 7" : null,
+          lineCap: "round"
+        }).addTo(mapInstance);
+        routeLayers.push(poly);
+
+        const m = L.circleMarker(p1, {
+          radius: idx === 0 ? 8 : 7,
+          color: "#fff",
+          weight: 2.5,
+          fillColor: idx === 0 ? "#0d9488" : MODE_META[leg.mode].color,
+          fillOpacity: 1
+        }).bindTooltip(idx === 0 ? `起點 · ${leg.departureStop}` : leg.departureStop, { permanent: true, direction: "top", offset: [0, -6] }).addTo(mapInstance);
+        routeLayers.push(m);
+        if (idx === plan.legs.length - 1) {
+          const destM = L.circleMarker(p2, {
+            radius: 9, color: "#fff", weight: 2.5, fillColor: "#e11d48", fillOpacity: 1
+          }).bindTooltip(`終點 · ${leg.arrivalStop}`, { permanent: true, direction: "top", offset: [0, -8] }).addTo(mapInstance);
+          routeLayers.push(destM);
+        }
+      });
+      if (bounds.length) mapInstance.fitBounds(bounds, { padding: [56, 56] });
+    }
+
+    function drawOfflineCanvas(plan = null) {
+      const canvas = document.getElementById("offlineVectorCanvas");
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = Math.max(320, rect.width);
+      canvas.height = Math.max(260, rect.height);
+      const ctx = canvas.getContext("2d");
+      const isDark = state.theme === "dark";
+
+      ctx.fillStyle = isDark ? "#0f172a" : "#f5f7fa";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Parks & river accents
+      ctx.fillStyle = isDark ? "#13312b" : "#daf3e4";
+      ctx.fillRect(40, 40, 90, 70);
+      ctx.fillRect(canvas.width - 150, canvas.height - 120, 110, 75);
+
+      ctx.strokeStyle = isDark ? "#153d56" : "#bce3fc";
+      ctx.lineWidth = 18;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height * 0.72);
+      ctx.quadraticCurveTo(canvas.width * 0.48, canvas.height * 0.55, canvas.width, canvas.height * 0.28);
+      ctx.stroke();
+
+      // Street grid
+      ctx.strokeStyle = isDark ? "#1e293b" : "#e2e8f0";
+      ctx.lineWidth = 1.2;
+      for (let x = 0; x < canvas.width; x += 48) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += 48) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      if (!plan) return;
+      const lats = plan.legs.flatMap(l => [l.startLat, l.endLat]);
+      const lngs = plan.legs.flatMap(l => [l.startLng, l.endLng]);
+      const minLat = Math.min(...lats) - 0.01, maxLat = Math.max(...lats) + 0.01;
+      const minLng = Math.min(...lngs) - 0.01, maxLng = Math.max(...lngs) + 0.01;
+      const proj = (lat, lng) => [
+        56 + ((lng - minLng) / (maxLng - minLng || 0.01)) * (canvas.width - 112),
+        canvas.height - 56 - ((lat - minLat) / (maxLat - minLat || 0.01)) * (canvas.height - 112)
+      ];
+
+      plan.legs.forEach((leg, idx) => {
+        const [x1, y1] = proj(leg.startLat, leg.startLng);
+        const [x2, y2] = proj(leg.endLat, leg.endLng);
+        ctx.strokeStyle = isDark ? "#0f172a" : "#ffffff";
+        ctx.lineWidth = leg.mode === "WALK" ? 6 : 11;
+        ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+
+        ctx.strokeStyle = MODE_META[leg.mode].color;
+        ctx.lineWidth = leg.mode === "WALK" ? 3.5 : 6.5;
+        ctx.setLineDash(leg.mode === "WALK" ? [7, 5] : []);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath(); ctx.arc(x1, y1, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = MODE_META[leg.mode].color;
+        ctx.beginPath(); ctx.arc(x1, y1, 5.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = isDark ? "#e2e8f0" : "#0f172a";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText(leg.departureStop, x1 + 11, y1 - 8);
+        if (idx === plan.legs.length - 1) {
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath(); ctx.arc(x2, y2, 9, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#e11d48";
+          ctx.beginPath(); ctx.arc(x2, y2, 6.5, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = isDark ? "#e2e8f0" : "#0f172a";
+          ctx.fillText(leg.arrivalStop, x2 + 11, y2 - 8);
+        }
+      });
+    }
+
+    function updateCacheStats() {
+      const wCount = Object.keys(JSON.parse(localStorage.getItem("metroflow_weather_cache") || "{}")).length;
+      const hasRoutes = !!localStorage.getItem("metroflow_last_routes");
+      document.getElementById("cacheStatsText").textContent = `已快取 ${wCount} 筆 Open-Meteo 路段氣象資料 · 離線最近路線：${hasRoutes ? "可用" : "無"}`;
+    }
+
+    // ========= Boot =========
+    function applyTheme() {
+      document.documentElement.setAttribute("data-theme", state.theme);
+      document.getElementById("themeToggleBtn").textContent = state.theme === "dark" ? "☀️ 淺色模式" : "🌙 深色模式";
+      localStorage.setItem("metroflow_theme", state.theme);
+      if (state.isOffline) drawOfflineCanvas(state.plans.find(p => p.id === state.selectedPlanId));
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      applyTheme();
+      updateCacheStats();
+      await loadSavedRoutes();
+
+      // Tabs
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          ["planner", "saved", "privacy"].forEach(t => {
+            document.getElementById("tab-" + t).style.display = (t === btn.dataset.tab) ? "flex" : "none";
+          });
+        });
+      });
+
+      // Theme & Offline controls
+      document.getElementById("themeToggleBtn").addEventListener("click", () => {
+        state.theme = state.theme === "dark" ? "light" : "dark";
+        applyTheme();
+      });
+      document.getElementById("offlineToggleBtn").addEventListener("click", () => {
+        state.isOffline = !state.isOffline;
+        document.getElementById("offlineToggleBtn").textContent = state.isOffline ? "📡 離線模式" : "🌐 連線中";
+        initMap();
+        refreshTopWeather();
+        refreshSegmentWeather();
+      });
+      document.getElementById("topWeatherBtn").addEventListener("click", () => {
+        refreshTopWeather();
+        refreshSegmentWeather();
+      });
+      document.getElementById("planBtn").addEventListener("click", () => runPlan());
+      document.getElementById("queryInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") runPlan();
+      });
+      // Date input init (today .. +13 days matching Open-Meteo)
+      const dateEl = document.getElementById("dateInput");
+      const todayDate = new Date();
+      const maxDate = new Date(todayDate.getTime() + 13 * 86400000);
+      const toIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      dateEl.value = toIso(todayDate);
+      dateEl.min = toIso(todayDate);
+      dateEl.max = toIso(maxDate);
+      dateEl.addEventListener("change", () => {
+        if (state.plans.length) refreshSegmentWeather();
+      });
+
+      document.getElementById("nowTimeBtn").addEventListener("click", () => {
+        document.getElementById("timeInput").value = "";
+        dateEl.value = toIso(new Date());
+        showToast("已重設為今天・現在出發");
+      });
+      document.querySelectorAll(".sample-query").forEach(el => {
+        el.addEventListener("click", () => runPlan(el.textContent));
+      });
+      document.getElementById("clearCacheBtn").addEventListener("click", () => {
+        localStorage.removeItem("metroflow_weather_cache");
+        localStorage.removeItem("metroflow_last_routes");
+        updateCacheStats();
+        showToast("已清除天氣與路線離線快取");
+      });
+
+      // Web Speech API voice input
+      document.getElementById("voiceInputBtn").addEventListener("click", () => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+          showToast("此瀏覽器不支援語音辨識，請直接文字輸入");
+          return;
+        }
+        const rec = new SR();
+        rec.lang = "zh-TW";
+        const btn = document.getElementById("voiceInputBtn");
+        btn.classList.add("recording");
+        rec.onresult = (e) => {
+          const text = e.results[0][0].transcript;
+          runPlan(text);
+        };
+        rec.onend = () => btn.classList.remove("recording");
+        rec.onerror = () => {
+          btn.classList.remove("recording");
+          showToast("語音辨識失敗，請再試一次");
+        };
+        rec.start();
+      });
+
+      // Live arrival countdown loop
+      countdownTimer = setInterval(() => {
+        if (!state.plans.length) return;
+        state.plans.forEach(plan => {
+          plan.legs.forEach(leg => {
+            leg.nextSec = leg.nextSec > 1 ? leg.nextSec - 1 : leg.headway * 60;
+          });
+          if (state.monitoredIds.has(plan.id)) {
+            const first = plan.legs.find(l => l.mode !== "WALK");
+            if (first && first.nextSec === 120) {
+              const msg = `${first.lineName} 即將於 2 分鐘內抵達 ${first.departureStop}`;
+              showToast("🔔 " + msg);
+              if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("MetroFlow 即時到站提醒", { body: msg });
+              }
+            }
+          }
+        });
+        renderRoutes();
+      }, 1000);
+
+      initMap();
+      await refreshTopWeather();
+
+      // Load cached route if available offline
+      const lastRoutes = localStorage.getItem("metroflow_last_routes");
+      if (lastRoutes) {
+        try {
+          state.plans = JSON.parse(lastRoutes);
+          state.selectedPlanId = state.plans[0]?.id || null;
+          renderRoutes();
+          drawSelectedRouteOnMap();
+          refreshSegmentWeather();
+        } catch {}
+      } else {
+        renderRoutes();
+      }
+    });
+  </script>
+</body>
+</html>
